@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aa2-uc2-poc-oc
+  labels:
+    app: aa2-uc2-poc-oc
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: aa2-uc2-poc-oc
+  template:
+    metadata:
+      labels:
+        app: aa2-uc2-poc-oc
+    spec:
+      containers:
+      - name: tailscale-sidecar
+        image: {{ .Values.tailscale.image }}
+        imagePullPolicy: Always
+        env:
+        - name: TS_KUBE_SECRET
+          value: ""
+        - name: TS_USERSPACE
+          value: "{{ .Values.tailscale.userSpace }}"
+        - name: TS_AUTHKEY
+          value: "{{ .Values.tailscale.authKey }}"
+        - name: TS_SOCKS5_SERVER
+          value: "localhost:1055"
+        - name: TS_OUTBOUND_HTTP_PROXY_LISTEN
+          value: "localhost:1055"
+      - name: myapp
+        image: {{ .Values.myapp.image }}
+        imagePullPolicy: Always
+        env:
+        - name: DISPLAY
+          value: "{{ .Values.myapp.display }}"
+        - name: LD_LIBRARY_PATH
+          value: "{{ .Values.myapp.ldLibraryPath }}"
+        - name: RTSP_ADDRESS
+          value: "{{ .Values.myapp.rtspAddress }}"
+        - name: ALL_PROXY
+          value: socks5://localhost:1055/
+        - name: HTTP_PROXY
+          value: http://localhost:1055/
+        - name: http_proxy
+          value: http://localhost:1055/
+        command: ["python3","detectv3.py","--threshold","0.5"]
+#        command: ["tail","-f","/dev/null"]

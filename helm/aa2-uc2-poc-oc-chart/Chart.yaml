@@ -1,0 +1,6 @@
+apiVersion: v2
+name: aa2-uc2-poc-oc
+description: A Helm chart for deploying aa2-uc2-poc-oc
+type: application
+version: 1.0.1
+appVersion: "2.0.0"
