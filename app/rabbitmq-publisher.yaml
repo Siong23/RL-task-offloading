@@ -1,0 +1,19 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: rabbitmq-publisher
+  namespace: monitoring
+spec:
+  template:
+    spec:
+      restartPolicy: Never  # Ensure the job runs only once
+      containers:
+      - name: rabbitmq-publisher
+        image: siong23/rabbitmq-publisher:latest  # Replace with your actual image
+        env:
+        - name: RABBITMQ_HOST
+          value: "rabbitmq"
+        - name: RABBITMQ_USER
+          value: "user"
+        - name: RABBITMQ_PASSWORD
+          value: "password"
