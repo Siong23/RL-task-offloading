@@ -1,0 +1,163 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus-stack
+  namespace: monitoring
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus-stack
+  template:
+    metadata:
+      labels:
+        app: prometheus-stack
+    spec:
+      securityContext:
+        runAsNonRoot: true
+      containers:
+      - name: prometheus
+        image: quay.io/prometheus/prometheus:v2.37.0
+        ports:
+        - containerPort: 9090
+        securityContext:
+          allowPrivilegeEscalation: false
+        args:
+        - "--config.file=/etc/prometheus/prometheus.yml"
+        - "--storage.tsdb.path=/prometheus"
+        env:
+        - name: HTTP_PROXY
+          value: "http://localhost:1055/"
+        - name: http_proxy
+          value: "http://localhost:1055/"
+        volumeMounts:
+        - name: config-volume
+          mountPath: /etc/prometheus
+        - name: data-volume
+          mountPath: /prometheus
+
+      - name: node-exporter
+        image: quay.io/prometheus/node-exporter:v1.6.1
+        ports:
+        - containerPort: 9100
+        securityContext:
+          allowPrivilegeEscalation: false
+        args:
+        - "--path.rootfs=/host"
+        volumeMounts:
+        - name: hostfs
+          mountPath: /host
+          readOnly: true
+
+      - name: tailscale
+        image: ghcr.io/tailscale/tailscale:latest
+        env:
+        - name: TS_KUBE_SECRET
+          value: ""
+        - name: TS_USERSPACE
+          value: "true"
+        - name: TS_AUTH_KEY
+          value: "<your_key>" # replace with your tailscale auth key
+#        - name: TS_SOCKS5_SERVER
+#          value: "localhost:1055"
+        - name: TS_OUTBOUND_HTTP_PROXY_LISTEN
+          value: "localhost:1055"
+
+      - name: rabbitmq
+        image: rabbitmq:3-management
+        ports:
+        - containerPort: 5672  # AMQP protocol port
+        - containerPort: 15672 # Management UI port
+        env:
+        - name: RABBITMQ_DEFAULT_USER
+          value: "user"
+        - name: RABBITMQ_DEFAULT_PASS
+          value: "password"
+        volumeMounts:
+        - name: rabbitmq-data-volume
+          mountPath: /var/lib/rabbitmq
+
+      volumes:
+      - name: config-volume
+        configMap:
+          name: prometheus-config
+      - name: data-volume
+        emptyDir: {}
+      - name: hostfs
+        emptyDir: {}
+      - name: tailscale-state
+        emptyDir: {}
+      - name: rabbitmq-data-volume
+        emptyDir: {}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  namespace: monitoring
+spec:
+  selector:
+    app: prometheus-stack
+  ports:
+  - protocol: TCP
+    port: 9090
+    targetPort: 9090
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: node-exporter
+  namespace: monitoring
+spec:
+  selector:
+    app: prometheus-stack
+  ports:
+  - protocol: TCP
+    port: 9100
+    targetPort: 9100
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rabbitmq
+  namespace: monitoring
+spec:
+  selector:
+    app: prometheus-stack
+  ports:
+  - name: amqp
+    protocol: TCP
+    port: 5672
+    targetPort: 5672
+  - name: management
+    protocol: TCP
+    port: 15672
+    targetPort: 15672
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: monitoring
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 10s
+
+    scrape_configs:
+      - job_name: "prometheus"
+        static_configs:
+          - targets: ["localhost:9090"]
+
+      - job_name: "node-exporter"
+        static_configs:
+          - targets: ["localhost:9100"]
+
+      - job_name: "pi5-node-exporter"
+        proxy_url: "http://localhost:1055/"
+        static_configs:
+          - targets: ["100.101.249.101:9100"]
