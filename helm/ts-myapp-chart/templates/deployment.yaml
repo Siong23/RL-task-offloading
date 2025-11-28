@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ts-myapp
+  labels:
+    app: ts-myapp
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: ts-myapp
+  template:
+    metadata:
+      labels:
+        app: ts-myapp
+    spec:
+      containers:
+      - name: tailscale-sidecar
+        image: {{ .Values.tailscale.image }}
+        imagePullPolicy: Always
+        env:
+        - name: TS_KUBE_SECRET
+          value: ""
+        - name: TS_USERSPACE
+          value: "{{ .Values.tailscale.userSpace }}"
+        - name: TS_AUTHKEY
+          value: "{{ .Values.tailscale.authKey }}"
+        securityContext:
+          capabilities:
+            add:
+            - NET_ADMIN
+            - SYS_MODULE
+      - name: myapp
+        image: {{ .Values.myapp.image }}
+        imagePullPolicy: Always
+        env:
+        - name: DISPLAY
+          value: "{{ .Values.myapp.display }}"
+        - name: LD_LIBRARY_PATH
+          value: "{{ .Values.myapp.ldLibraryPath }}"
+        - name: RTSP_ADDRESS
+          value: "{{ .Values.myapp.rtspAddress }}"
+        securityContext:
+          privileged: true
+        volumeMounts:
+        {{- range .Values.volumes }}
+        - mountPath: {{ .hostPath }}
+          name: {{ .name }}
+        {{- end }}
+      volumes:
+      {{- range .Values.volumes }}
+      - name: {{ .name }}
+        hostPath:
+          path: {{ .hostPath }}
+      {{- end }}

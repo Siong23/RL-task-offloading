@@ -1,0 +1,26 @@
+replicaCount: 1
+
+tailscale:
+  image: ghcr.io/tailscale/tailscale:latest
+  authKey: "<your_key>"  #replace-with-your-ts-authkey
+  userSpace: false
+
+myapp:
+  image: siong23/classify-detect:latest
+  display: ":0"
+  ldLibraryPath: "/opt/vc/lib:/lib:/usr/lib:/usr/local/lib"
+  rtspAddress: "rtsp://100.97.158.25:8554/unicast"
+
+volumes:
+  - name: dev-vchiq
+    hostPath: /dev/vchiq
+  - name: dev-bus-usb
+    hostPath: /dev/bus/usb
+  - name: dev-vc
+    hostPath: /dev/vc
+  - name: dev-video0
+    hostPath: /dev/video0
+  - name: tmp-x11-unix
+    hostPath: /tmp/.X11-unix
+  - name: xauthority
+    hostPath: /home/user/.Xauthority
