@@ -18,8 +18,8 @@ The project utilizes Python for the core RL implementation and leverages contain
 
 | Directory | Description |
 | :---- | :---- |
-| app/ | Core RL training scripts, environment definition, and testing utilities. |
-| model/ | Stores the trained weights and configurations for DRL agents. |
+| app/ | Stores the application components and task offloading agent script. |
+| model/ | Stores the trained weights, core RL training scripts, and testing utilities. |
 | dataset1/ | First set of simulation data. |
 | dataset2/ | Second set of experimental data. |
 | demo/ | Scripts for running quick demonstrations or inference tests with pre-trained models and demo video. |
