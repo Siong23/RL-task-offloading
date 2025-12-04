@@ -38,7 +38,7 @@ The project utilizes Python for the core RL implementation and leverages contain
 ### **Python Environment Setup**
 
 1. **Clone the repository:**  
-   git clone \[https://github.com/Siong23/RL-task-offloading.git\](https://github.com/Siong23/RL-task-offloading.git)  
+   git clone https://github.com/Siong23/RL-task-offloading.git  
    cd RL-task-offloading
 
 2. **Create a virtual environment (recommended):**  
