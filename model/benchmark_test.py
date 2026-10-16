@@ -52,26 +52,29 @@ class BenchmarkEnvironment:
             base_iot_cpu = 0.05
             base_edge_cpu = 0.05
 
+        # Task load is added once, only to the device that runs the task.
         iot_task_load = (1 - action) * (phi * H) / (C_iot * T)
         edge_task_load = action * (phi * H) / (C_edge * T)
 
-        self.iot_cpu_usage = np.clip(base_iot_cpu + iot_task_load, 0.05, 0.99)
-        self.edge_cpu_usage = np.clip(base_edge_cpu + edge_task_load, 0.05, 0.99)
+        L_dt_raw = base_iot_cpu + iot_task_load
+        L_et_raw = base_edge_cpu + edge_task_load
+
+        self.iot_cpu_usage = np.clip(L_dt_raw, 0.05, 0.99)
+        self.edge_cpu_usage = np.clip(L_et_raw, 0.05, 0.99)
+        return L_dt_raw, L_et_raw
 
     def step(self, action):
-        self.update_cpu_usage(action)
+        L_dt_raw, L_et_raw = self.update_cpu_usage(action)
 
-        epsilon = 1e-6
-        available_iot_capacity = max(C_iot * (1 - self.iot_cpu_usage), epsilon)
-        available_edge_capacity = max(C_edge * (1 - self.edge_cpu_usage), epsilon)
+        # Capacity violation: the chosen device would need more than 100% CPU.
+        if action == 1:
+            capacity_violation = 1 if L_et_raw >= 1 else 0
+        else:
+            capacity_violation = 1 if L_dt_raw >= 1 else 0
 
-        L_et_raw = (2 * action - 1) * (phi * H) / (available_edge_capacity * T) + self.edge_cpu_usage
-        L_dt_raw = (2 * (1 - action) - 1) * (phi * H) / (available_iot_capacity * T) + self.iot_cpu_usage
-
-        L_et = np.clip(L_et_raw, 0, 1)
+        # Load scores are the resulting CPU usage (no second task-load term).
         L_dt = np.clip(L_dt_raw, 0, 1)
-
-        capacity_violation = 1 if (L_et >= 1 and action == 1) or (L_dt >= 1 and action == 0) else 0
+        L_et = np.clip(L_et_raw, 0, 1)
 
         C_1t = min(np.abs(L_dt - L_et), 1e6)
         C_2t = int(action != self.prev_action)
@@ -118,6 +121,7 @@ def evaluate_method(method, benchmark_data, episodes=50, steps_per_episode=100):
 
     rewards, costs, ratios, iot_cpus, edge_cpus = [], [], [], [], []
     c1t_histories, c2t_histories = [], []
+    total_violations = 0
 
     for episode in range(episodes):
         state = env.reset()
@@ -127,8 +131,9 @@ def evaluate_method(method, benchmark_data, episodes=50, steps_per_episode=100):
 
         for step in range(steps_per_episode):
             action = method.get_action(state)
-            state, reward, c1t, c2t, cost, _ = env.step(action)
+            state, reward, c1t, c2t, cost, violation = env.step(action)
 
+            total_violations += violation
             total_reward += reward
             total_cost += cost
             offloads += action
@@ -155,7 +160,8 @@ def evaluate_method(method, benchmark_data, episodes=50, steps_per_episode=100):
         'cost_history': costs,
         'offload_history': ratios,
         'c1t_history': c1t_histories,
-        'c2t_history': c2t_histories
+        'c2t_history': c2t_histories,
+        'violations': total_violations
     }
 
 def plot_comparison(results):
@@ -232,7 +238,9 @@ def plot_comparison(results):
     axs[1, 1].grid(True, alpha=0.3)
     axs[1, 1].set_ylim(0, 1)
 
-    plt.tight_layout()
+    # Save before showing, so the saved image is not blank.
+    fig.tight_layout()
+    fig.savefig('benchmark_comparison.png', dpi=300, bbox_inches='tight')
     plt.show()
 
 def load_benchmark_data(filename):
@@ -249,7 +257,7 @@ def load_benchmark_data(filename):
         return pd.DataFrame()
 
 def main():
-    benchmark_data = load_benchmark_data('training_data.csv')
+    benchmark_data = load_benchmark_data('benchmark_data.csv')
 
     methods = {
         'Q-Learning': QLearningMethod('simulation_dataset_q_learning_model.pkl'),
@@ -276,6 +284,10 @@ def main():
     print("\nAdditional Statistics:")
     for name, res in results.items():
         print(f"\n{name}:")
+        print(f"  Total reward: {np.sum(res['reward_history']):.2f}")
+        print(f"  Avg reward per episode: {res['rewards']:.2f}")
+        print(f"  Capacity violations: {res['violations']}")
+        print(f"  Offload ratio: {res['offload_ratio']:.4f}")
         print(f"  Reward std: {np.std(res['reward_history']):.2f}")
         print(f"  Cost std: {np.std(res['cost_history']):.2f}")
         print(f"  C1t std: {np.std(res['c1t_history']):.2f}")
