@@ -59,26 +59,25 @@ class Environment:
     def step(self, action):
         base_edge_cpu, base_iot_cpu = self.update_cpu_from_dataset()
 
+        # Task load is added once, only to the device that runs the task.
         iot_task_load = (1 - action) * (phi * H) / (C_iot * T)
         edge_task_load = action * (phi * H) / (C_edge * T)
 
-        self.iot_cpu_usage = np.clip(base_iot_cpu + iot_task_load, 0.05, 0.99)
-        self.edge_cpu_usage = np.clip(base_edge_cpu + edge_task_load, 0.05, 0.99)
+        L_dt_raw = base_iot_cpu + iot_task_load
+        L_et_raw = base_edge_cpu + edge_task_load
 
-        epsilon = 1e-6
-        available_iot_capacity = max(C_iot * (1 - self.iot_cpu_usage), epsilon)
-        available_edge_capacity = max(C_edge * (1 - self.edge_cpu_usage), epsilon)
-
-        L_et_raw = (2 * action - 1) * (phi * H) / (available_edge_capacity * T) + self.edge_cpu_usage
-        L_dt_raw = (2 * (1 - action) - 1) * (phi * H) / (available_iot_capacity * T) + self.iot_cpu_usage
-
-        L_et = np.clip(L_et_raw, 0, 1)
-        L_dt = np.clip(L_dt_raw, 0, 1)
-
+        # Capacity violation: the chosen device would need more than 100% CPU.
         if action == 1:
-            capacity_violation = 1 if L_et >= 1 else 0
+            capacity_violation = 1 if L_et_raw >= 1 else 0
         else:
-            capacity_violation = 1 if L_dt >= 1 else 0
+            capacity_violation = 1 if L_dt_raw >= 1 else 0
+
+        self.iot_cpu_usage = np.clip(L_dt_raw, 0.05, 0.99)
+        self.edge_cpu_usage = np.clip(L_et_raw, 0.05, 0.99)
+
+        # Load scores are the resulting CPU usage (no second task-load term).
+        L_dt = np.clip(L_dt_raw, 0, 1)
+        L_et = np.clip(L_et_raw, 0, 1)
 
         C_1t = min(np.abs(L_dt - L_et), 1e6)
         C_2t = int(action != self.prev_action)
@@ -271,12 +270,11 @@ def run_simulation():
     axs2[1].set_ylabel('Q-value Δ Sum')
     axs2[1].grid(True)
 
-    plt.tight_layout()
-    plt.savefig('q_learning_analysis_plots.png', dpi=300, bbox_inches='tight')
-    plt.show()
-
-    plt.tight_layout()
-    plt.savefig('training_results.png', dpi=300, bbox_inches='tight')
+    # Save each figure explicitly before showing, so neither image is blank.
+    fig.tight_layout()
+    fig.savefig('training_results.png', dpi=300, bbox_inches='tight')
+    fig2.tight_layout()
+    fig2.savefig('q_learning_analysis_plots.png', dpi=300, bbox_inches='tight')
     plt.show()
 
     agent.export_model('simulation_dataset_q_learning_model.pkl')
